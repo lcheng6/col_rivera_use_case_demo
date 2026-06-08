@@ -4,8 +4,8 @@ from pathlib import Path
 import pandas as pd
 
 repo = Path(__file__).resolve().parents[1]
-ag = pd.read_excel(repo / "data" / "synthetic_data.xlsx", sheet_name="Data")
-op = pd.read_excel(repo / "data" / "synthetic_data_open_system.xlsx", sheet_name="Data")
+ag = pd.read_excel(repo / "data" / "synthetic_data_red_side.xlsx", sheet_name="Data")
+op = pd.read_excel(repo / "data" / "synthetic_data_green_side.xlsx", sheet_name="Data")
 
 DOLLARS = "Dollars (in $K)"
 

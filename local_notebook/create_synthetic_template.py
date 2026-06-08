@@ -53,7 +53,7 @@ COLUMNS = [
     "OCO ISR Title",
 ]
 
-out_path = Path(__file__).resolve().parents[1] / "data" / "synthetic_data.xlsx"
+out_path = Path(__file__).resolve().parents[1] / "data" / "synthetic_data_red_side.xlsx"
 out_path.parent.mkdir(parents=True, exist_ok=True)
 
 df = pd.DataFrame(columns=COLUMNS)

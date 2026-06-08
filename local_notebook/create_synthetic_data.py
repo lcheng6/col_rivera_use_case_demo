@@ -856,7 +856,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=SEED, help="RNG seed")
     parser.add_argument("--rows", type=int, default=N_ROWS, help="row count")
     parser.add_argument("--out", type=Path, default=None,
-                        help="output file (.xlsx or .csv). Default: data/synthetic_data.xlsx")
+                        help="output file (.xlsx or .csv). Default: data/synthetic_data_red_side.xlsx")
     parser.add_argument("--db-pulls", action="store_true",
                         help="generate data/db_pull_1.csv and data/db_pull_2.csv "
                              "with different seeds (overrides --seed/--out)")
@@ -870,7 +870,7 @@ def main() -> None:
             _write(df, data_dir / name)
         return
 
-    out = args.out if args.out is not None else data_dir / "synthetic_data.xlsx"
+    out = args.out if args.out is not None else data_dir / "synthetic_data_red_side.xlsx"
     df = build_rows(args.rows, args.seed)
     _write(df, out)
 

@@ -179,7 +179,7 @@ Operational and Maintenance AF -> `AFEEIC Cost Category Title`,
    * Budget spending on trapped on 2 different systems, one on air-gapped side, and one in a publicly available cloud system.  So these tools don't talk to each other, however, they are tracking the spending activities of the same organization, so at some level of aggregation, for example total spending for FY2025 has to be equal, or within a tiny discrepancy of each other.  
    * The 2 system also track line items differently at different categorization.  I can give you a contrived example, for you to follow: 
      * Say you are tracking budget of the food services for FY2025.  The air-gapped system could break down the costs at the meal level `Other Services - Breakfast`, `Other Services - Lunch`, and `Other Services - Dinner`, where as the open system would track it as at a food supplier/ingredient level `Dining Services - Dairy`, `Dining Services - Meat`, `Dining Services - Vegatables`, `Dining Services - Misc`.  You can't easily match line to line, but when summed together as dinning services on a per year basis, you can see that these lines match
-   * You've already created synthetic data in [synthetic_data.xlsx](../../data/synthetic_data.xlsx), let's call that synthetic data that corresponds to the air-gapped system. 
+   * You've already created synthetic data in [synthetic_data_red_side.xlsx](../../data/synthetic_data_red_side.xlsx), let's call that synthetic data that corresponds to the air-gapped system. 
    * Now I need you to create the synthetic data set that corresponds to the open system, keep in mind the point I mentioned earlier about different ways of categorization and how the money amount differ, but still remember that when aggregated, the result shouldn't differ by more than .01%.  Start with playing with `AFEEIC Cost Category Title` column and corresponding costs first.  
    * Show me what categorization you've made to reconcile between the 2 systems in Status
    * Can you also tell me which columns, when sum-aggregated, should be consistent between the 2 datasets? 
@@ -188,13 +188,13 @@ Operational and Maintenance AF -> `AFEEIC Cost Category Title`,
 ### Status
 
 #### Task 1 — DONE
-`data/synthetic_data.xlsx` — 25,000 rows × 49 columns. Generator: `local_notebook/create_synthetic_data.py`.
+`data/synthetic_data_red_side.xlsx` — 25,000 rows × 49 columns. Generator: `local_notebook/create_synthetic_data.py`.
 
 #### Task 2 — DONE
 `data/db_pull_1.csv` and `data/db_pull_2.csv` — both 25,000 rows × 49 columns, different seeds (70001, 70002), same schema and categorical logic as the Excel, different dollar amounts. Same generator with `--db-pulls` flag.
 
 #### Task 3 — DONE
-`data/synthetic_data_open_system.xlsx` — 4,678 rows × 49 columns. Generator: `local_notebook/create_open_system_data.py`.
+`data/synthetic_data_green_side.xlsx` — 4,678 rows × 49 columns. Generator: `local_notebook/create_open_system_data.py`.
 
 **Reconciliation grain:** `(APPN, Fiscal Year)`. Per-bucket diff ≤ 0.005%, max overall diff -0.00064%. All 110 buckets reconcile within the 0.01% tolerance. Jitter (±0.005%) is applied per bucket so the two systems don't tie exactly.
 

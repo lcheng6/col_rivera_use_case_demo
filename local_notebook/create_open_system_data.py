@@ -1,6 +1,6 @@
 """Generate the 'open system' synthetic dataset.
 
-Treats data/synthetic_data.xlsx as the air-gapped side and produces an
+Treats data/synthetic_data_red_side.xlsx as the air-gapped side and produces an
 open-system counterpart with:
 
 - The same APPN <-> APPN Title pairs, the same Fiscal Year range, the same
@@ -328,8 +328,8 @@ def reconcile_report(air_gapped: pd.DataFrame, open_sys: pd.DataFrame) -> pd.Dat
 
 def main() -> None:
     repo = Path(__file__).resolve().parents[1]
-    ag_path = repo / "data" / "synthetic_data.xlsx"
-    out_path = repo / "data" / "synthetic_data_open_system.xlsx"
+    ag_path = repo / "data" / "synthetic_data_red_side.xlsx"
+    out_path = repo / "data" / "synthetic_data_green_side.xlsx"
 
     print(f"Reading air-gapped data from {ag_path} ...")
     air_gapped = pd.read_excel(ag_path)
