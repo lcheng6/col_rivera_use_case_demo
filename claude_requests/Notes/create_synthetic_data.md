@@ -172,6 +172,6 @@ Operational and Maintenance AF -> AFEIC Title,
 ### Tasks
 
 * Create an Excel spreadsheet in [data](../../data) with right column headings
-* 
+* Create two CSV files that has the same columns and same logic as the Excel spreadsheet, but different dollar amounts, I want to use these as simulated database pulls 
 
 ### Status

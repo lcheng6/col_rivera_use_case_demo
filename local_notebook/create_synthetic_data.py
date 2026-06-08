@@ -2,10 +2,21 @@
 
 Uses real DoD appropriation codes, Budget Activity structure, and OP-32 line
 numbers to keep the shape realistic; dollar amounts and detailed line text are
-fabricated. Output: data/synthetic_data.xlsx, 25,000 rows.
+fabricated.
+
+Default invocation writes the canonical Excel file:
+    uv run python local_notebook/create_synthetic_data.py
+
+To write a single output file with a custom seed and row count:
+    uv run python local_notebook/create_synthetic_data.py \
+        --seed 12345 --rows 25000 --out data/db_pull_1.csv
+
+To produce both simulated database-pull CSVs in one invocation:
+    uv run python local_notebook/create_synthetic_data.py --db-pulls
 """
 from __future__ import annotations
 
+import argparse
 import random
 from pathlib import Path
 
@@ -830,14 +841,38 @@ def build_rows(n: int, seed: int) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=COLUMNS)
 
 
-def main() -> None:
-    df = build_rows(N_ROWS, SEED)
-    out = Path(__file__).resolve().parents[1] / "data" / "synthetic_data.xlsx"
+def _write(df: pd.DataFrame, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_excel(out, index=False, sheet_name="Data")
-    print(f"Wrote {out}: {len(df):,} rows x {len(df.columns)} cols")
-    print(f"Total dollars (sum K): ${df['Dollars (in $K)'].sum():,.0f}K")
-    print(f"Total dollars (sum M): ${df['Dollars (in $M)'].sum():,.1f}M")
+    if out.suffix.lower() == ".csv":
+        df.to_csv(out, index=False)
+    else:
+        df.to_excel(out, index=False, sheet_name="Data")
+    print(f"Wrote {out}: {len(df):,} rows x {len(df.columns)} cols, "
+          f"sum=${df['Dollars (in $K)'].sum():,.0f}K")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--seed", type=int, default=SEED, help="RNG seed")
+    parser.add_argument("--rows", type=int, default=N_ROWS, help="row count")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="output file (.xlsx or .csv). Default: data/synthetic_data.xlsx")
+    parser.add_argument("--db-pulls", action="store_true",
+                        help="generate data/db_pull_1.csv and data/db_pull_2.csv "
+                             "with different seeds (overrides --seed/--out)")
+    args = parser.parse_args()
+
+    data_dir = Path(__file__).resolve().parents[1] / "data"
+
+    if args.db_pulls:
+        for seed, name in [(70001, "db_pull_1.csv"), (70002, "db_pull_2.csv")]:
+            df = build_rows(args.rows, seed)
+            _write(df, data_dir / name)
+        return
+
+    out = args.out if args.out is not None else data_dir / "synthetic_data.xlsx"
+    df = build_rows(args.rows, args.seed)
+    _write(df, out)
 
 
 if __name__ == "__main__":
