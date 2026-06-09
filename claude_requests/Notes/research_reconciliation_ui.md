@@ -1,20 +1,25 @@
 # Design Memo: Streamlit MVP for Budget Reconciliation Tool
 
 > Research output from subagent run on 2026-06-09. Companion to `research_reconciliation_algorithm.md`. Not yet implemented.
+>
+> **Revision 2 (2026-06-09):** the workflow grain is now **per APPN** (11 rows in the synthetic data), not per `(APPN, Fiscal Year)` (110 rows). A single grouping covers all FYs; the review screen surfaces per-FY diagnostics so the analyst can see at a glance which years pass and which fail the tolerance gate.
+>
+> **Decisions made (2026-06-09):**
+> 1. File-load mode → **hardcoded paths** (`data/synthetic_data_red_side.xlsx`, `data/synthetic_data_green_side.xlsx`). No file-uploader in MVP.
 
 **Audience:** Budget analysts at COL Rivera's organization
-**Goal:** Let one analyst load two budget datasets, walk through algorithm-proposed groupings per `(APPN, Fiscal Year)`, edit them, lock them, and export.
+**Goal:** Let one analyst load two budget datasets, walk through algorithm-proposed groupings per APPN (with per-FY diagnostics), edit them, lock them, and export.
 
 ## 1. User Flow
 
 The analyst lives in a single Streamlit app with four logical phases, navigated by a left sidebar:
 
-1. **Load** — landing page. Analyst points at the two Excel files (default: `data/synthetic_data_red_side.xlsx` and `data/synthetic_data_green_side.xlsx`). App parses, validates `(APPN, Fiscal Year)` pairs, runs the reconciliation algorithm in the background, caches candidate solutions in `st.session_state`.
-2. **Overview** — bucket-status table showing all `(APPN, FY)` pairs and their current state (Unstarted / Draft / Locked). Click a row to drill in.
-3. **Reconcile** — the workhorse screen. For the selected bucket, show algorithm's top-K candidates, let analyst edit, lock individual groups, request next candidate, then "Lock bucket" overall.
-4. **Export** — once N buckets are locked, download as Excel + JSON.
+1. **Load** — landing page. App auto-loads the two Excel files from the hardcoded paths, validates the 11 APPN groups, runs the reconciliation algorithm in the background, caches candidate solutions in `st.session_state`.
+2. **Overview** — APPN-status table (11 rows) showing each APPN's current state (Unstarted / Draft / Locked) and a year-pass summary (e.g. "10/10 years within tol" or "7/10 years pass"). Click a row to drill in.
+3. **Reconcile** — the workhorse screen. For the selected APPN, show algorithm's top-K candidate groupings, each with a per-FY sum-diff strip so the analyst can see which years pass. Let analyst edit, lock individual groups, request next candidate, then "Lock APPN" overall.
+4. **Export** — once N APPNs are locked, download as Excel + JSON.
 
-Transitions: Load → Overview (auto on parse success) → Reconcile (click row) → Overview (back button, state persists) → Export (sidebar). The analyst typically loops Overview ↔ Reconcile 110 times (one per bucket).
+Transitions: Load → Overview (auto on parse success) → Reconcile (click row) → Overview (back button, state persists) → Export (sidebar). The analyst typically loops Overview ↔ Reconcile 11 times (one per APPN), not 110.
 
 ## 2. Key Screens
 
@@ -24,8 +29,10 @@ Transitions: Load → Overview (auto on parse success) → Reconcile (click row)
 +--------------------------------------------------------+
 | Budget Reconciliation Tool                  v0.1 (MVP) |
 +--------------------------------------------------------+
-| Red-side  (granular)     [ data/synthetic_red.xlsx  v] |
-| Green-side (rolled-up)   [ data/synthetic_green.xlsx v]|
+| Red-side  (granular)     data/synthetic_data_red_side  |
+|                          .xlsx                          |
+| Green-side (rolled-up)   data/synthetic_data_green_side|
+|                          .xlsx                          |
 |                                                        |
 | [  Load & Run Reconciliation Algorithm  ]              |
 |                                                        |
@@ -33,50 +40,59 @@ Transitions: Load → Overview (auto on parse success) → Reconcile (click row)
 +--------------------------------------------------------+
 ```
 
-After click: progress bar (`st.status`) shows "Parsing red (25,000 rows)... Parsing green (4,678 rows)... Building 110 candidate sets... Done."
+After click: progress bar (`st.status`) shows "Parsing red (25,000 rows)... Parsing green (4,678 rows)... Solving 11 APPN groupings... Done."
 
-### 2.2 Bucket-Status Overview
+### 2.2 APPN-Status Overview
 
 ```
 +----------------------------------------------------------+
-| Overview — 110 buckets        Locked: 12 | Draft: 3 | -- |
+| Overview — 11 APPNs           Locked: 2 | Draft: 1 | --  |
 +----------------------------------------------------------+
-| APPN  | APPN Title                | FY   | Red$K | State|
-| 3400  | Operation & Maintenance-AF | 2024 |  4.2M | LOCK |
-| 3400  | Operation & Maintenance-AF | 2025 |  4.1M | DRAFT|
-| 3740  | O&M - AFR                  | 2024 |   52K | --   |
-| 3500  | Military Personnel - AF    | 2024 |   ... | --   |
+| APPN  | APPN Title                | $K/yr | Years | State|
+| 3400  | Operation & Maintenance-AF | 4.2M  | 10/10 | LOCK |
+| 3500  | Military Personnel - AF    | 1.5M  | 9/10  | DRAFT|
+| 3740  | O&M - AFR                  |   52K | 10/10 | LOCK |
+| 3080  | Other Procurement - AF     |  720K |  6/10 | --   |
+| 3600  | RDT&E - AF                 | 1.7M  | 10/10 | --   |
+| 0540  | Medicare Retire Cont - AF  | 2.8M  | 10/10 | --   |
+| ...                                                       |
 +----------------------------------------------------------+
-   [ Filter: APPN v ] [ FY v ] [ State v ] [ Search ___ ]
+   [ Filter: APPN v ] [ State v ] [ Search ___ ]
 ```
 
-Color: green row = locked, yellow = draft, gray = untouched. Click any row → Reconcile screen for that bucket.
+The "Years" column shows `<years passing>/<years total>` for the current top candidate at the default tolerance — that's the all-year gating check at a glance. Color: green row = locked, yellow = draft, gray = untouched. Click any row → Reconcile screen for that APPN.
 
 ### 2.3 Candidate-Grouping Review (the core screen)
 
 ```
-+-----------------------------------------------------------+
-| Bucket: 3740 / O&M-AFR / FY2024                           |
-| Candidate 1 of 5   [< Prev] [Next >]   Confidence: HIGH   |
-| Total red: $52,151K   Total green: $52,148K   diff: 0.006%|
-+-----------------------------------------------------------+
-| Group 1: "Travel Services"        sum-diff: 0.04% within  |
-|----------------------------|------------------------------|
-| RED (15)                   | GREEN (1)                    |
-|  [x] Travel - Airfare      |  [x] Travel Services         |
-|  [x] Travel - Lodging      |                              |
-|  [x] Travel - Meals  ...   |                              |
-|  Red $:  21,400K           |  Green $: 21,408K            |
-|  [ Lock group ]  [ Edit v ]  similarity: 0.94             |
-|-----------------------------------------------------------|
-| Group 2: "Personnel Services"     sum-diff: 0.32% OVER    |
-| ...                                                       |
-+-----------------------------------------------------------+
-| [ Reject candidate, show next ]   [ Lock entire bucket ]  |
-+-----------------------------------------------------------+
++-------------------------------------------------------------+
+| APPN: 3740 / O&M-AFR                                        |
+| Candidate 1 of 5   [< Prev] [Next >]   Confidence: HIGH     |
+| All years within tol: 10/10  Total red (10yr): $448K        |
++-------------------------------------------------------------+
+| Group 1: "Travel Services"                                  |
+|---------------------------|---------------------------------|
+| RED (15)                  | GREEN (1)                       |
+|  [x] Travel - Airfare     |  [x] Travel Services            |
+|  [x] Travel - Lodging     |                                 |
+|  [x] Travel - Meals  ...  |                                 |
+| similarity: 0.94          | match_type: many-to-one         |
+|---------------------------|---------------------------------|
+| Per-FY sum-diff:                                            |
+|  2024 [v] 0.04%   2025 [v] 0.02%   2026 [v] 0.05%           |
+|  2027 [v] 0.03%   2028 [v] 0.04%   2029 [v] 0.06%           |
+|  2030 [v] 0.02%   2031 [v] 0.05%   2032 [v] 0.04%           |
+|  2033 [v] 0.03%        max: 0.06%  avg: 0.04%               |
+|  [ Lock group ]   [ Edit v ]                                |
+|-------------------------------------------------------------|
+| Group 2: "Personnel Services"           1 year FAIL (2027)  |
+|  ... per-FY strip with 2027 highlighted red ...             |
++-------------------------------------------------------------+
+| [ Reject candidate, show next ]   [ Lock entire APPN ]      |
++-------------------------------------------------------------+
 ```
 
-Each group is an `st.expander`, headed by a colored badge: green tick if within tolerance, red warning if over. Two columns side-by-side (`st.columns(2)`) show red and green members.
+Each group is an `st.expander`. The per-FY sum-diff strip is the gating-check view: every year that passes shows a green tick + diff%, every year that fails shows a red mark and is called out in the group header. Group-level "Lock" is enabled only if all 10 years pass (or if the analyst opts to force-lock — see Open Question 6).
 
 ### 2.4 Manual Group Editor
 
@@ -102,10 +118,10 @@ A `st.data_editor` with one row per category and a categorical "Group" column. S
 ```
 +-----------------------------------------------------------+
 | Export                                                    |
-|  Locked buckets: 12 / 110                                 |
+|  Locked APPNs: 2 / 11                                     |
 |  [ Download groupings.xlsx ] [ Download groupings.json ]  |
 |  [ Download full audit log .csv ]                         |
-|  Warning: 98 buckets still unlocked.                      |
+|  Warning: 9 APPNs still unlocked.                         |
 +-----------------------------------------------------------+
 ```
 
@@ -125,6 +141,10 @@ A `st.data_editor` with one row per category and a categorical "Group" column. S
 | Medium / Low | yellow / red pill |
 | Sum-diff within tolerance | green check, "0.04% within" |
 | Sum-diff over tolerance | red triangle, "0.32% OVER" |
+| All years pass gate | green "10/10 years" badge in group header |
+| Some years fail gate | yellow/red "N/10 years" badge with failing years listed |
+| Per-FY strip cell (pass) | small green tick + diff% in monospace |
+| Per-FY strip cell (fail) | red mark + diff% in monospace |
 | Consumed category | strikethrough name + gray text |
 | Available category | normal text |
 | Semantic similarity | small inline number, 0.00–1.00 |
@@ -160,11 +180,12 @@ Emoji used sparingly in badges only; everything else is text + color so it survi
 
 ## 7. Open Questions for the User
 
-1. **Data load mode:** hardcoded paths (fast MVP) or `st.file_uploader` (deployable demo)?
+1. ~~**Data load mode:** hardcoded paths (fast MVP) or `st.file_uploader` (deployable demo)?~~ **RESOLVED 2026-06-09: hardcoded paths.**
 2. **Algorithm contract:** can the algorithm return a JSON of candidate groupings, or must the app call into it live? Affects caching strategy.
 3. **Export format:** wide Excel (one row per red category with its assigned green bucket) or long (one row per red-green pair)?
 4. **Auth:** is this a single-user local app or does it need login? Affects whether session state persists across browser closes.
-5. **Persistence:** when the analyst quits mid-bucket, do we save to disk or lose work?
-6. **Acceptance rule for "locked":** must sum-diff be within tolerance, or can analyst force-lock an out-of-tolerance group with a note?
+5. **Persistence:** when the analyst quits mid-APPN, do we save to disk or lose work?
+6. **Acceptance rule for "locked":** must every group sum-balance for every year, or can analyst force-lock a group that fails some years (with a note)?
+7. **Tolerance default:** the current synthetic data has ±0.005% per-bucket jitter and independent year-over-year green distribution, so the all-year gate only passes at tolerance ≥ ~0.5%. Default to 0.5% in MVP, regenerate data with explicit rollup later? Or invert: regenerate first, then default to 0.01%?
 
-Answers to (1), (3), and (6) are blocking for week-1 implementation.
+Answers to (3), (6), (7) are blocking for week-1 implementation.
