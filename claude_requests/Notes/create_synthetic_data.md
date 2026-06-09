@@ -106,9 +106,8 @@ National Guard Peronnel - AF:
 * adm - cloth / death gratuities
 * adm - travel / allowances / base pay / school allowances/ base pay/ retired pay/ savings. 
 
-
-Operational and Maintenance AF -> `AFEEIC Cost Category Title`, 
-`AFEEIC Cost Category Title` Sample Values: 
+Sample AFEEIC Cost Category Title under a specfic `APPN Title`
+With `APPN Title` == `Operational and Maintenance - AF` and its corresponding `AFEEIC Cost Category Title` has these Sample Values: 
 * Engineering Technical Services
 * Fuel
 * IT Contracting Services
@@ -171,12 +170,12 @@ Operational and Maintenance AF -> `AFEEIC Cost Category Title`,
 * Travel - Conference Travel Expenses
 ### Tasks
 
-1. Create an Excel spreadsheet in [data](../../data) with right column headings
+1. Create an Excel spreadsheet in [data](../../data) with right column headings, put it into [synthetic_data_red_side.xlsx](../../data/synthetic_data_red_side.xlsx)'s Data Tab
 
 2. Create two CSV files that has the same columns and same logic as the Excel spreadsheet, but different dollar amounts, I want to use these as simulated database pulls 
 
 3. This next part is going to require some imagination and creative thinking on your part.  I need to simulate a budget line item reconciliation problem.  It's something like this: 
-   * Budget spending on trapped on 2 different systems, one on air-gapped side, and one in a publicly available cloud system.  So these tools don't talk to each other, however, they are tracking the spending activities of the same organization, so at some level of aggregation, for example total spending for FY2025 has to be equal, or within a tiny discrepancy of each other.  
+   * Budget spending by the Armed Service are stored on 2 different systems, one on air-gapped side, and one in a publicly available cloud system.  So these tools don't talk to each other. However, they are tracking the spending activities of the same organization, so at some level of aggregation, for example total spending for FY2025 has to be equal, or within a tiny discrepancy of each other.  
    * The 2 system also track line items differently at different categorization.  I can give you a contrived example, for you to follow: 
      * Say you are tracking budget of the food services for FY2025.  The air-gapped system could break down the costs at the meal level `Other Services - Breakfast`, `Other Services - Lunch`, and `Other Services - Dinner`, where as the open system would track it as at a food supplier/ingredient level `Dining Services - Dairy`, `Dining Services - Meat`, `Dining Services - Vegatables`, `Dining Services - Misc`.  You can't easily match line to line, but when summed together as dinning services on a per year basis, you can see that these lines match
    * You've already created synthetic data in [synthetic_data_red_side.xlsx](../../data/synthetic_data_red_side.xlsx), let's call that synthetic data that corresponds to the air-gapped system. 
