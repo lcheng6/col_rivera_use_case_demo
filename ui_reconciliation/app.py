@@ -3,10 +3,13 @@
 Run:
     uv run streamlit run ui_reconciliation/app.py
 
-Layout follows research_reconciliation_ui.md: Load -> Overview -> Reconcile.
+Layout follows research_reconciliation_ui.md: Load -> Overview -> Reconcile ->
+Export. Per the 2026-06-09 decisions: hardcoded data paths, long-format
+export, force-lock allowed (with required note), default tolerance 1.5%.
 """
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -18,7 +21,19 @@ REPO = Path(__file__).resolve().parents[1]
 RED_PATH = REPO / "data" / "synthetic_data_red_side.xlsx"
 GREEN_PATH = REPO / "data" / "synthetic_data_green_side.xlsx"
 
+DEFAULT_TOLERANCE_PCT = 1.5  # per Q7 decision (2026-06-09)
+
 st.set_page_config(page_title="Budget Reconciliation MVP", layout="wide")
+
+# ---------------------------------------------------------------------------
+# Session state setup
+# ---------------------------------------------------------------------------
+if "lock_state" not in st.session_state:
+    # {appn_title: "locked" | "draft" | None}
+    st.session_state["lock_state"] = {}
+if "force_notes" not in st.session_state:
+    # {appn_title: note_string} for force-locked APPNs
+    st.session_state["force_notes"] = {}
 
 
 @st.cache_data(show_spinner="Loading red-side dataset...")
@@ -97,15 +112,19 @@ def appn_overview(tolerance_pct: float) -> pd.DataFrame:
 # Sidebar nav
 # ---------------------------------------------------------------------------
 st.sidebar.title("Budget Reconciliation")
-phase = st.sidebar.radio("Phase", ["Load", "Overview", "Reconcile"], index=1)
+phase = st.sidebar.radio("Phase", ["Load", "Overview", "Reconcile", "Export"], index=1)
 st.sidebar.divider()
 tolerance_pct = st.sidebar.slider(
-    "Tolerance %", min_value=0.01, max_value=5.0, value=0.5, step=0.01,
+    "Tolerance %", min_value=0.01, max_value=5.0, value=DEFAULT_TOLERANCE_PCT, step=0.01,
     help="Per (bucket, FY) sum-diff tolerance. Cells above this are flagged.",
 )
 similarity_weight = st.sidebar.slider(
     "Similarity weight", min_value=0, max_value=500, value=100, step=10,
     help="Higher = stronger Jaccard name-similarity tie-breaker.",
+)
+st.sidebar.caption(
+    f"Locked APPNs: "
+    f"{sum(1 for s in st.session_state['lock_state'].values() if s == 'locked')}"
 )
 
 
@@ -204,7 +223,152 @@ elif phase == "Reconcile":
                 )
 
     st.divider()
+
+    # --- Lock / Force-lock controls ---
+    appn_all_ok = all(
+        all(abs(p["diff_pct"]) <= tolerance_pct for p in g["per_fy"])
+        for g in res["groups"]
+    )
+    current_state = st.session_state["lock_state"].get(selected)
+    state_label = current_state or "unlocked"
+    st.write(f"**APPN state:** `{state_label}`"
+             + (f"  (force-lock note: _{st.session_state['force_notes'].get(selected, '')}_)"
+                if current_state == "force_locked" else ""))
+
+    col_a, col_b, col_c = st.columns([1, 1, 2])
+    with col_a:
+        if appn_all_ok:
+            if st.button("Lock APPN", type="primary", use_container_width=True,
+                         disabled=current_state in ("locked", "force_locked")):
+                st.session_state["lock_state"][selected] = "locked"
+                st.session_state["force_notes"].pop(selected, None)
+                st.rerun()
+        else:
+            st.button("Lock APPN", disabled=True, use_container_width=True,
+                     help="Disabled because at least one group is out of tolerance. Use Force lock with a note.")
+    with col_b:
+        force_label = "Force lock" if not appn_all_ok else "Lock anyway"
+        if st.button(force_label, use_container_width=True,
+                     disabled=current_state in ("locked", "force_locked")):
+            st.session_state["__pending_force"] = selected
+    with col_c:
+        if current_state in ("locked", "force_locked"):
+            if st.button("Unlock", use_container_width=True):
+                st.session_state["lock_state"].pop(selected, None)
+                st.session_state["force_notes"].pop(selected, None)
+                st.rerun()
+
+    # Force-lock note dialog (modal-ish via st.session_state)
+    if st.session_state.get("__pending_force") == selected:
+        with st.form(key="force_lock_form"):
+            note = st.text_area(
+                "Force-lock note (required) — explain why this APPN is being locked "
+                "with groups outside tolerance:",
+                value="",
+                key="force_lock_note_input",
+            )
+            submitted = st.form_submit_button("Confirm force-lock")
+            if submitted:
+                if note.strip():
+                    st.session_state["lock_state"][selected] = "force_locked"
+                    st.session_state["force_notes"][selected] = note.strip()
+                    st.session_state.pop("__pending_force", None)
+                    st.rerun()
+                else:
+                    st.error("A non-empty note is required to force-lock.")
+
+# ---------------------------------------------------------------------------
+# Export phase
+# ---------------------------------------------------------------------------
+elif phase == "Export":
+    st.header("Export reconciliation results")
+    lock_state = st.session_state["lock_state"]
+    force_notes = st.session_state["force_notes"]
+    locked_titles = [a for a, s in lock_state.items() if s in ("locked", "force_locked")]
     st.caption(
-        "MVP scaffold — no editing affordances yet. Edit + lock affordances "
-        "land in v1 per `claude_requests/Notes/research_reconciliation_ui.md`."
+        f"Locked APPNs: **{len(locked_titles)}** "
+        f"(of which **{sum(1 for s in lock_state.values() if s == 'force_locked')}** are force-locked)."
+    )
+
+    only_locked = st.checkbox("Export only locked APPNs", value=True)
+    if not only_locked:
+        # Export everything that has been computed
+        all_appns = appn_overview(tolerance_pct)["APPN Title"].tolist()
+        titles_to_export = all_appns
+    else:
+        titles_to_export = locked_titles
+
+    if not titles_to_export:
+        st.info("Nothing to export. Lock at least one APPN on the Reconcile screen, or uncheck the filter above.")
+        st.stop()
+
+    # Build the long-format rows per Q3 decision
+    rows = []
+    red_df_full = load_red()
+    appn_to_code = (
+        red_df_full[["APPN", "APPN Title"]]
+        .drop_duplicates()
+        .set_index("APPN Title")["APPN"]
+        .to_dict()
+    )
+    with st.status(f"Solving for {len(titles_to_export)} APPN(s)...", expanded=False) as status:
+        for appn_title in titles_to_export:
+            res = reconcile(appn_title, similarity_weight=similarity_weight)
+            state = lock_state.get(appn_title) or "unlocked"
+            note = force_notes.get(appn_title, "")
+            for g in res["groups"]:
+                green_bucket = g["green_bucket"]
+                for red_cat in g["red_members"]:
+                    for per_fy in g["per_fy"]:
+                        fy = per_fy["fy"]
+                        # red category's share of group sum in this FY
+                        rows.append({
+                            "appn": appn_to_code.get(appn_title, ""),
+                            "appn_title": appn_title,
+                            "fy": fy,
+                            "red_cat": red_cat,
+                            "green_bucket": green_bucket,
+                            "red_group_sum": per_fy["red_sum"],
+                            "green_sum": per_fy["green_sum"],
+                            "diff_pct": per_fy["diff_pct"],
+                            "within_tol": abs(per_fy["diff_pct"]) <= tolerance_pct,
+                            "lock_state": state,
+                            "force_lock_note": note,
+                            "tolerance_pct": tolerance_pct,
+                            "similarity_weight": similarity_weight,
+                        })
+        status.update(label=f"Built {len(rows):,} rows.", state="complete")
+
+    export_df = pd.DataFrame(rows)
+    st.subheader("Preview (first 20 rows)")
+    st.dataframe(export_df.head(20), use_container_width=True, hide_index=True)
+    st.metric("Total rows", f"{len(export_df):,}")
+
+    # Download buttons
+    csv_bytes = export_df.to_csv(index=False).encode("utf-8")
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="reconciliation")
+    xlsx_bytes = buf.getvalue()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            "Download long-format CSV", data=csv_bytes,
+            file_name="reconciliation_long.csv", mime="text/csv",
+            use_container_width=True,
+        )
+    with col2:
+        st.download_button(
+            "Download long-format Excel", data=xlsx_bytes,
+            file_name="reconciliation_long.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+    st.caption(
+        "Long format per Q3 decision (2026-06-09): one row per "
+        "(red category, green bucket, fiscal year). Force-lock notes preserved in the "
+        "`force_lock_note` column. Tolerance and similarity-weight settings used for the "
+        "solve are stamped on every row."
     )

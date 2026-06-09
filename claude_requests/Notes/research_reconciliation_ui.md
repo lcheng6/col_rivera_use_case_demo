@@ -4,8 +4,11 @@
 >
 > **Revision 2 (2026-06-09):** the workflow grain is now **per APPN** (11 rows in the synthetic data), not per `(APPN, Fiscal Year)` (110 rows). A single grouping covers all FYs; the review screen surfaces per-FY diagnostics so the analyst can see at a glance which years pass and which fail the tolerance gate.
 >
-> **Decisions made (2026-06-09):**
-> 1. File-load mode → **hardcoded paths** (`data/synthetic_data_red_side.xlsx`, `data/synthetic_data_green_side.xlsx`). No file-uploader in MVP.
+> **Decisions made (2026-06-09)** — keyed by Open Question number in §7:
+> - **Q1 File-load mode** → **hardcoded paths** (`data/synthetic_data_red_side.xlsx`, `data/synthetic_data_green_side.xlsx`). No file-uploader in MVP.
+> - **Q3 Export format** → **long** (one row per red-green pair: `appn, fy, red_cat, green_bucket, red_sum, green_sum, diff_pct, locked`). Easier to pivot downstream than a wide layout.
+> - **Q6 Force-lock** → **allowed**. Analyst can lock a group even if some years are outside tolerance, with a required note. The note is captured per-group and exported in the audit log.
+> - **Q7 Tolerance default** → **1.5%** in MVP. Loose enough to keep early data variants in scope; user can tighten via the sidebar slider.
 
 **Audience:** Budget analysts at COL Rivera's organization
 **Goal:** Let one analyst load two budget datasets, walk through algorithm-proposed groupings per APPN (with per-FY diagnostics), edit them, lock them, and export.
@@ -182,10 +185,10 @@ Emoji used sparingly in badges only; everything else is text + color so it survi
 
 1. ~~**Data load mode:** hardcoded paths (fast MVP) or `st.file_uploader` (deployable demo)?~~ **RESOLVED 2026-06-09: hardcoded paths.**
 2. **Algorithm contract:** can the algorithm return a JSON of candidate groupings, or must the app call into it live? Affects caching strategy.
-3. **Export format:** wide Excel (one row per red category with its assigned green bucket) or long (one row per red-green pair)?
+3. ~~**Export format:** wide Excel or long (one row per red-green pair)?~~ **RESOLVED 2026-06-09: long.** Columns: `appn, fy, red_cat, green_bucket, red_sum, green_sum, diff_pct, locked, force_lock_note`.
 4. **Auth:** is this a single-user local app or does it need login? Affects whether session state persists across browser closes.
 5. **Persistence:** when the analyst quits mid-APPN, do we save to disk or lose work?
-6. **Acceptance rule for "locked":** must every group sum-balance for every year, or can analyst force-lock a group that fails some years (with a note)?
-7. **Tolerance default:** the current synthetic data has ±0.005% per-bucket jitter and independent year-over-year green distribution, so the all-year gate only passes at tolerance ≥ ~0.5%. Default to 0.5% in MVP, regenerate data with explicit rollup later? Or invert: regenerate first, then default to 0.01%?
+6. ~~**Acceptance rule for "locked":** must every group sum-balance for every year, or can analyst force-lock a group that fails some years (with a note)?~~ **RESOLVED 2026-06-09: force-lock allowed.** A "Force lock" button alongside the regular Lock button, requires a free-text note when used. Note is preserved in the audit log and the long-format export.
+7. ~~**Tolerance default:** what %?~~ **RESOLVED 2026-06-09: 1.5%.** User can tighten or loosen via the sidebar slider (range 0.01–5.0).
 
-Answers to (3), (6), (7) are blocking for week-1 implementation.
+Remaining open: (2), (4), (5). None block the MVP — all have safe defaults (call algorithm live, single-user, session-only state).
