@@ -182,7 +182,19 @@ With `APPN Title` == `Operational and Maintenance - AF` and its corresponding `A
    * Now I need you to create the synthetic data set that corresponds to the open system, keep in mind the point I mentioned earlier about different ways of categorization and how the money amount differ, but still remember that when aggregated, the result shouldn't differ by more than .01%.  Start with playing with `AFEEIC Cost Category Title` column and corresponding costs first.  
    * Show me what categorization you've made to reconcile between the 2 systems in Status
    * Can you also tell me which columns, when sum-aggregated, should be consistent between the 2 datasets? 
-     
+
+4. Further differentiation of categories.  
+   * **NOTE** this section is a draft, Claude, don't act on this section yet. 
+   * If we zoom into the subsets of data in both [synthetic_data_green_side.xlsx](../../data/synthetic_data_green_side.xlsx) and 
+[synthetic_data_red_side.xlsx](../../data/synthetic_data_red_side.xlsx), and by narrowing into the data where `APPN Title` == `Operation and Maintenance - AFR`.  We can see these category reconcilliation.
+   | Green Side Data | Red Side Data |
+   |---|---|
+   | **Personnel Services** | Other Services - Other General Training; Other Services - Education; Other Services - Tuition Assistance; Other Services - Professional Education; Other Services - Continued Education (5 items — education / development costs) |
+   | **Travel Services** | All 15 Travel items: Travel Expenses; Travel - Airfare; Travel - Train; Travel - Rental Cars; Travel - Mileage Reimbursement; Travel - Rideshare/Taxi; Travel - Fuel; Travel - Lodging; Travel - Lodging Incidentals; Travel - Meals; Travel - Meal Tips; Travel - Conference and Events; Travel - Workshop and Training; Travel - Communication; Travel - Baggage Fees |
+   | **Mission Support Contracts** | Engineering Technical Services; IT Contracting Services; Other Services - Acquisition and Non-Acquisition Support (3 items) |
+   | **Facilities and Logistics** | Fuel; Postal; Software Depot (3 items) |
+   | **General Services** | Other Services (catch-all); Other Services - Chaplain Support; Other Services - In Country Support Cost (3 items) |
+   * The **variety** of categories on the Green Side is fewer than I would need for a good presentation.  Can you create additional categories and make sure to spread the cost of the redside categories
 
 ### Status
 
